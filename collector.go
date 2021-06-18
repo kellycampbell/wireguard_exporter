@@ -2,9 +2,9 @@ package wireguardexporter
 
 import (
 	"fmt"
-	"log"
 	"net"
 
+	"github.com/mdlayher/wireguard_exporter/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
@@ -105,7 +105,7 @@ func (c *collector) Describe(ch chan<- *prometheus.Desc) {
 func (c *collector) Collect(ch chan<- prometheus.Metric) {
 	devices, err := c.devices()
 	if err != nil {
-		log.Printf("failed to list devices: %v", err)
+		log.Warnf("failed to list devices: %v", err)
 		ch <- prometheus.NewInvalidMetric(c.DeviceInfo, err)
 		return
 	}

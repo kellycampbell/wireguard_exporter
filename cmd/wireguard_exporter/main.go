@@ -4,13 +4,14 @@ package main
 
 import (
 	"flag"
-	"log"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	wireguardexporter "github.com/mdlayher/wireguard_exporter"
+	"github.com/mdlayher/wireguard_exporter/log"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.zx2c4.com/wireguard/wgctrl"
@@ -25,6 +26,8 @@ func main() {
 	)
 
 	flag.Parse()
+
+	log.InitLogger()
 
 	client, err := wgctrl.New()
 	if err != nil {
@@ -48,7 +51,7 @@ func main() {
 			peerNames[kv[0]] = kv[1]
 		}
 
-		log.Printf("loaded %d peer name mappings from command line", len(peerNames))
+		log.Infof("loaded %d peer name mappings from command line", len(peerNames))
 	}
 
 	// In addition, load peer name mappings from a file if specified.
@@ -65,7 +68,7 @@ func main() {
 		}
 		_ = f.Close()
 
-		log.Printf("loaded %d peer name mappings from file %q", len(names), file)
+		log.Infof("loaded %d peer name mappings from file %q", len(names), file)
 
 		// Merge file name mappings and overwrite CLI mappings if necessary.
 		for k, v := range names {
@@ -82,14 +85,27 @@ func main() {
 	mux.Handle(*metricsPath, promhttp.Handler())
 
 	// Start listening for HTTP connections.
-	log.Printf("starting WireGuard exporter on %q", *metricsAddr)
 	server := http.Server{
 		Addr:         *metricsAddr,
 		Handler:      mux,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 	}
-	if err := server.ListenAndServe(); err != nil {
-		log.Fatalf("cannot start WireGuard exporter: %s", err)
+	stopCh := make(chan bool)
+
+	wireguardexporter.InitService(&server, stopCh)
+	go func() {
+		log.Infof("starting WireGuard exporter on %q", *metricsAddr)
+		if err := server.ListenAndServe(); err != nil {
+			log.Fatalf("cannot start WireGuard exporter: %s", err)
+		}
+	}()
+
+	for {
+		if <-stopCh {
+			log.Info("Shutting down windows_exporter")
+			break
+		}
 	}
+	return
 }
